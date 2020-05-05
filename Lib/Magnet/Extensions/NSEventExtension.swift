@@ -1,19 +1,27 @@
-// 
+//
 //  NSEventExtension.swift
 //
 //  Magnet
 //  GitHub: https://github.com/clipy
 //  HP: https://clipy-app.com
-// 
+//
 //  Copyright © 2015-2020 Clipy Project.
 //
 
 import Cocoa
 import Carbon
 
+let SUPPORTED_MODIFIERS = NSEvent.ModifierFlags(arrayLiteral: [
+    .command,
+    .option,
+    .control,
+    .shift,
+    .function
+])
+
 public extension NSEvent.ModifierFlags {
     var containsSupportModifiers: Bool {
-        return contains(.command) || contains(.option) || contains(.control) || contains(.shift) || contains(.function)
+        return isSubset(of: SUPPORTED_MODIFIERS)
     }
     var isSingleFlags: Bool {
         let commandSelected = contains(.command)

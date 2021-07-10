@@ -20,6 +20,7 @@ public final class HotKeyCenter {
     private var hotKeyCount: UInt32 = 0
     private let modifierEventHandler: ModifierEventHandler
     private let notificationCenter: NotificationCenter
+    private var eventHandler: EventHandlerRef?
 
     // MARK: - Initialize
     init(modifierEventHandler: ModifierEventHandler = .init(), notificationCenter: NotificationCenter = .default) {
@@ -115,13 +116,13 @@ extension HotKeyCenter {
 
 // MARK: - HotKey Events
 private extension HotKeyCenter {
-    func installHotKeyPressedEventHandler() {
+    @discardableResult func installHotKeyPressedEventHandler() -> OSStatus {
         var pressedEventType = EventTypeSpec()
         pressedEventType.eventClass = OSType(kEventClassKeyboard)
         pressedEventType.eventKind = OSType(kEventHotKeyPressed)
-        InstallEventHandler(GetEventDispatcherTarget(), { inCallRef, inEvent, _ -> OSStatus in
+        return InstallEventHandler(GetEventDispatcherTarget(), { inCallRef, inEvent, _ -> OSStatus in
             return HotKeyCenter.shared.sendPressedKeyboardEvent(inCallRef!, inEvent!)
-        }, 1, &pressedEventType, nil, nil)
+        }, 1, &pressedEventType, nil, &eventHandler)
     }
 
     func sendPressedKeyboardEvent(_ caller: EventHandlerCallRef, _ event: EventRef) -> OSStatus {
@@ -143,7 +144,8 @@ private extension HotKeyCenter {
         switch GetEventKind(event) {
         case EventParamName(kEventHotKeyPressed):
             guard let hotKey = hotKey else {
-                return CallNextEventHandler(caller, event)
+                RemoveEventHandler(eventHandler)
+                return installHotKeyPressedEventHandler()
             }
             hotKey.invoke()
         default:

@@ -20,7 +20,6 @@ public final class HotKeyCenter {
     private var hotKeyCount: UInt32 = 0
     private let modifierEventHandler: ModifierEventHandler
     private let notificationCenter: NotificationCenter
-    private var eventHandler: EventHandlerRef?
 
     // MARK: - Initialize
     init(modifierEventHandler: ModifierEventHandler = .init(), notificationCenter: NotificationCenter = .default) {
@@ -80,9 +79,11 @@ public extension HotKeyCenter {
     }
 
     func unregister(with hotKey: HotKey) {
-        if let carbonHotKey = hotKey.hotKeyRef {
-            UnregisterEventHotKey(carbonHotKey)
+        guard let carbonHotKey = hotKey.hotKeyRef else {
+            print("Unregistering hotkey that was never registered in this HotkeyCenter: \(hotKey.identifier)")
+            return
         }
+        UnregisterEventHotKey(carbonHotKey)
         hotKeys.removeValue(forKey: hotKey.identifier)
         hotKey.hotKeyId = nil
         hotKey.hotKeyRef = nil
@@ -116,16 +117,16 @@ extension HotKeyCenter {
 
 // MARK: - HotKey Events
 private extension HotKeyCenter {
-    @discardableResult func installHotKeyPressedEventHandler() -> OSStatus {
+    func installHotKeyPressedEventHandler() {
         var pressedEventType = EventTypeSpec()
         pressedEventType.eventClass = OSType(kEventClassKeyboard)
         pressedEventType.eventKind = OSType(kEventHotKeyPressed)
-        return InstallEventHandler(GetEventDispatcherTarget(), { inCallRef, inEvent, _ -> OSStatus in
-            return HotKeyCenter.shared.sendPressedKeyboardEvent(inCallRef!, inEvent!)
-        }, 1, &pressedEventType, nil, &eventHandler)
+        InstallEventHandler(GetEventDispatcherTarget(), { _, inEvent, _ -> OSStatus in
+            return HotKeyCenter.shared.sendPressedKeyboardEvent(inEvent!)
+        }, 1, &pressedEventType, nil, nil)
     }
 
-    func sendPressedKeyboardEvent(_ caller: EventHandlerCallRef, _ event: EventRef) -> OSStatus {
+    func sendPressedKeyboardEvent(_ event: EventRef) -> OSStatus {
         assert(Int(GetEventClass(event)) == kEventClassKeyboard, "Unknown event class")
 
         var hotKeyId = EventHotKeyID()
@@ -143,11 +144,7 @@ private extension HotKeyCenter {
         let hotKey = hotKeys.values.first(where: { $0.hotKeyId == hotKeyId.id })
         switch GetEventKind(event) {
         case EventParamName(kEventHotKeyPressed):
-            guard let hotKey = hotKey else {
-                RemoveEventHandler(eventHandler)
-                return installHotKeyPressedEventHandler()
-            }
-            hotKey.invoke()
+            hotKey?.invoke()
         default:
             assert(false, "Unknown event kind")
         }

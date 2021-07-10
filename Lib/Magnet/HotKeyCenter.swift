@@ -119,12 +119,12 @@ private extension HotKeyCenter {
         var pressedEventType = EventTypeSpec()
         pressedEventType.eventClass = OSType(kEventClassKeyboard)
         pressedEventType.eventKind = OSType(kEventHotKeyPressed)
-        InstallEventHandler(GetEventDispatcherTarget(), { _, inEvent, _ -> OSStatus in
-            return HotKeyCenter.shared.sendPressedKeyboardEvent(inEvent!)
+        InstallEventHandler(GetEventDispatcherTarget(), { inCallRef, inEvent, _ -> OSStatus in
+            return HotKeyCenter.shared.sendPressedKeyboardEvent(inEvent!) ?? CallNextEventHandler(inCallRef, inEvent)
         }, 1, &pressedEventType, nil, nil)
     }
 
-    func sendPressedKeyboardEvent(_ event: EventRef) -> OSStatus {
+    func sendPressedKeyboardEvent(_ event: EventRef) -> OSStatus? {
         assert(Int(GetEventClass(event)) == kEventClassKeyboard, "Unknown event class")
 
         var hotKeyId = EventHotKeyID()
@@ -142,7 +142,8 @@ private extension HotKeyCenter {
         let hotKey = hotKeys.values.first(where: { $0.hotKeyId == hotKeyId.id })
         switch GetEventKind(event) {
         case EventParamName(kEventHotKeyPressed):
-            hotKey?.invoke()
+            guard let hotKey = hotKey else {return nil}
+            hotKey.invoke()
         default:
             assert(false, "Unknown event kind")
         }

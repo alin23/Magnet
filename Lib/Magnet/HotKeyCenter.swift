@@ -11,9 +11,49 @@
 import Cocoa
 import Carbon
 
+private extension NSRecursiveLock {
+    @inline(__always) func aroundThrows<T>(
+        timeout: TimeInterval = 10,
+        ignoreMainThread: Bool = false,
+        _ closure: () throws -> T
+    ) throws -> T {
+        if ignoreMainThread, Thread.isMainThread {
+            return try closure()
+        }
+
+        let locked = lock(before: Date().addingTimeInterval(timeout))
+        defer { if locked { unlock() } }
+
+        return try closure()
+    }
+
+    @inline(__always) func around<T>(timeout: TimeInterval = 10, ignoreMainThread: Bool = false, _ closure: () -> T) -> T {
+        if ignoreMainThread, Thread.isMainThread {
+            return closure()
+        }
+
+        let locked = lock(before: Date().addingTimeInterval(timeout))
+        defer { if locked { unlock() } }
+
+        return closure()
+    }
+
+    @inline(__always) func around(timeout: TimeInterval = 10, ignoreMainThread: Bool = false, _ closure: () -> Void) {
+        if ignoreMainThread, Thread.isMainThread {
+            return closure()
+        }
+
+        let locked = lock(before: Date().addingTimeInterval(timeout))
+        defer { if locked { unlock() } }
+
+        closure()
+    }
+}
+
 public final class HotKeyCenter {
 
     // MARK: - Properties
+    private let lock = NSRecursiveLock()
     public static let shared = HotKeyCenter()
 
     private var hotKeys = [String: HotKey]()
@@ -40,10 +80,14 @@ public final class HotKeyCenter {
 public extension HotKeyCenter {
     @discardableResult
     func register(with hotKey: HotKey) -> Bool {
-        guard !hotKeys.keys.contains(hotKey.identifier) else { return false }
-        guard !hotKeys.values.contains(hotKey) else { return false }
+        let exists = lock.around { () -> Bool in
+            guard !hotKeys.keys.contains(hotKey.identifier) else { return true }
+            guard !hotKeys.values.contains(hotKey) else { return true }
 
-        hotKeys[hotKey.identifier] = hotKey
+            hotKeys[hotKey.identifier] = hotKey
+            return false
+        }
+        guard !exists else { return false }
         guard !hotKey.keyCombo.doubledModifiers else { return true }
         /*
          *  Normal macOS shortcut
@@ -84,20 +128,27 @@ public extension HotKeyCenter {
             return
         }
         UnregisterEventHotKey(carbonHotKey)
-        hotKeys.removeValue(forKey: hotKey.identifier)
+        lock.around {
+            hotKeys.removeValue(forKey: hotKey.identifier)
+            return
+        }
         hotKey.hotKeyId = nil
         hotKey.hotKeyRef = nil
     }
 
     @discardableResult
     func unregisterHotKey(with identifier: String) -> Bool {
-        guard let hotKey = hotKeys[identifier] else { return false }
-        unregister(with: hotKey)
-        return true
+        return lock.around {
+            guard let hotKey = hotKeys[identifier] else { return false }
+            unregister(with: hotKey)
+            return true
+        }
     }
 
     func unregisterAll() {
-        hotKeys.forEach { unregister(with: $1) }
+        lock.around {
+            hotKeys.forEach { unregister(with: $1) }
+        }
     }
 }
 
@@ -141,7 +192,7 @@ private extension HotKeyCenter {
         guard error == noErr else { return error }
         assert(hotKeyId.signature == UTGetOSTypeFromString("Magnet" as CFString), "Invalid hot key id")
 
-        let hotKey = hotKeys.values.first(where: { $0.hotKeyId == hotKeyId.id })
+        let hotKey = lock.around { hotKeys.values.first(where: { $0.hotKeyId == hotKeyId.id }) }
         switch GetEventKind(event) {
         case EventParamName(kEventHotKeyPressed):
             hotKey?.invoke()
@@ -163,10 +214,13 @@ private extension HotKeyCenter {
             return event
         }
         modifierEventHandler.doubleTapped = { [weak self] tappedModifierFlags in
-            self?.hotKeys.values
-                .filter { $0.keyCombo.doubledModifiers }
-                .filter { $0.keyCombo.modifiers == tappedModifierFlags.carbonModifiers() }
-                .forEach { $0.invoke() }
+            guard let self = self else { return }
+            self.lock.around {
+                self.hotKeys.values
+                    .filter { $0.keyCombo.doubledModifiers }
+                    .filter { $0.keyCombo.modifiers == tappedModifierFlags.carbonModifiers() }
+                    .forEach { $0.invoke() }
+            }
         }
     }
 }

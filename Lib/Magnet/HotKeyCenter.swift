@@ -8,8 +8,10 @@
 //  Copyright © 2015-2020 Clipy Project.
 //
 
-import Cocoa
 import Carbon
+import Cocoa
+import Combine
+import Foundation
 
 private extension NSRecursiveLock {
     @inline(__always) func aroundThrows<T>(
@@ -50,9 +52,21 @@ private extension NSRecursiveLock {
     }
 }
 
-public final class HotKeyCenter {
+extension UserDefaults {
+    @objc var keyRepeat: Double {
+        get { return double(forKey: "KeyRepeat") }
+        set { set(newValue, forKey: "KeyRepeat") }
+    }
 
+    @objc var initialKeyRepeat: Double {
+        get { return double(forKey: "InitialKeyRepeat") }
+        set { set(newValue, forKey: "InitialKeyRepeat") }
+    }
+}
+
+public final class HotKeyCenter {
     // MARK: - Properties
+
     private let lock = NSRecursiveLock()
     public static let shared = HotKeyCenter()
 
@@ -60,12 +74,37 @@ public final class HotKeyCenter {
     private var hotKeyCount: UInt32 = 0
     private let modifierEventHandler: ModifierEventHandler
     private let notificationCenter: NotificationCenter
+    private var keyHoldInvoker: Timer?
+    private var keyHoldInvokeCreator: DispatchWorkItem?
+    public var detectKeyHold = true
+
+    private static var keyRepeatIntervalObserver = UserDefaults.standard
+        .publisher(for: \.keyRepeat)
+        .sink { interval in
+            HotKeyCenter.keyRepeatInterval = interval * 0.015
+        }
+
+    public static var keyRepeatInterval = UserDefaults.standard.keyRepeat * 0.015
+
+    private static var initialKeyRepeatIntervalObserver = UserDefaults.standard
+        .publisher(for: \.initialKeyRepeat)
+        .sink { interval in
+            HotKeyCenter.initialKeyRepeatInterval = interval * 0.015
+        }
+
+    public static var initialKeyRepeatInterval = UserDefaults.standard.initialKeyRepeat * 0.015
 
     // MARK: - Initialize
-    init(modifierEventHandler: ModifierEventHandler = .init(), notificationCenter: NotificationCenter = .default) {
+
+    init(modifierEventHandler: ModifierEventHandler = .init(), notificationCenter: NotificationCenter = .default, detectKeyHold: Bool = true) {
         self.modifierEventHandler = modifierEventHandler
         self.notificationCenter = notificationCenter
-        installHotKeyPressedEventHandler()
+        self.detectKeyHold = detectKeyHold
+
+        installHotKeyEventHandler(kind: OSType(kEventHotKeyPressed))
+        if detectKeyHold {
+            installHotKeyEventHandler(kind: OSType(kEventHotKeyReleased))
+        }
         installModifiersChangedEventHandlerIfNeeded()
         observeApplicationTerminate()
     }
@@ -73,10 +112,10 @@ public final class HotKeyCenter {
     deinit {
         notificationCenter.removeObserver(self)
     }
-
 }
 
 // MARK: - Register & Unregister
+
 public extension HotKeyCenter {
     @discardableResult
     func register(with hotKey: HotKey) -> Bool {
@@ -105,12 +144,14 @@ public extension HotKeyCenter {
          */
         let hotKeyId = EventHotKeyID(signature: UTGetOSTypeFromString("Magnet" as CFString), id: hotKeyCount)
         var carbonHotKey: EventHotKeyRef?
-        let error = RegisterEventHotKey(UInt32(hotKey.keyCombo.currentKeyCode),
-                                        UInt32(hotKey.keyCombo.modifiers),
-                                        hotKeyId,
-                                        GetEventDispatcherTarget(),
-                                        0,
-                                        &carbonHotKey)
+        let error = RegisterEventHotKey(
+            UInt32(hotKey.keyCombo.currentKeyCode),
+            UInt32(hotKey.keyCombo.modifiers),
+            hotKeyId,
+            GetEventDispatcherTarget(),
+            0,
+            &carbonHotKey
+        )
         guard error == noErr else {
             unregister(with: hotKey)
             return false
@@ -128,9 +169,8 @@ public extension HotKeyCenter {
             return
         }
         UnregisterEventHotKey(carbonHotKey)
-        lock.around {
+        _ = lock.around {
             hotKeys.removeValue(forKey: hotKey.identifier)
-            return
         }
         hotKey.hotKeyId = nil
         hotKey.hotKeyRef = nil
@@ -153,12 +193,15 @@ public extension HotKeyCenter {
 }
 
 // MARK: - Terminate
+
 extension HotKeyCenter {
     private func observeApplicationTerminate() {
-        notificationCenter.addObserver(self,
-                                       selector: #selector(HotKeyCenter.applicationWillTerminate),
-                                       name: NSApplication.willTerminateNotification,
-                                       object: nil)
+        notificationCenter.addObserver(
+            self,
+            selector: #selector(HotKeyCenter.applicationWillTerminate),
+            name: NSApplication.willTerminateNotification,
+            object: nil
+        )
     }
 
     @objc func applicationWillTerminate() {
@@ -167,27 +210,30 @@ extension HotKeyCenter {
 }
 
 // MARK: - HotKey Events
+
 private extension HotKeyCenter {
-    func installHotKeyPressedEventHandler() {
-        var pressedEventType = EventTypeSpec()
-        pressedEventType.eventClass = OSType(kEventClassKeyboard)
-        pressedEventType.eventKind = OSType(kEventHotKeyPressed)
+    func installHotKeyEventHandler(kind: OSType) {
+        var eventType = EventTypeSpec()
+        eventType.eventClass = OSType(kEventClassKeyboard)
+        eventType.eventKind = kind
         InstallEventHandler(GetEventDispatcherTarget(), { _, inEvent, _ -> OSStatus in
-            return HotKeyCenter.shared.sendPressedKeyboardEvent(inEvent!)
-        }, 1, &pressedEventType, nil, nil)
+            HotKeyCenter.shared.sendKeyboardEvent(inEvent!)
+        }, 1, &eventType, nil, nil)
     }
 
-    func sendPressedKeyboardEvent(_ event: EventRef) -> OSStatus {
+    func sendKeyboardEvent(_ event: EventRef) -> OSStatus {
         assert(Int(GetEventClass(event)) == kEventClassKeyboard, "Unknown event class")
 
         var hotKeyId = EventHotKeyID()
-        let error = GetEventParameter(event,
-                                      EventParamName(kEventParamDirectObject),
-                                      EventParamName(typeEventHotKeyID),
-                                      nil,
-                                      MemoryLayout<EventHotKeyID>.size,
-                                      nil,
-                                      &hotKeyId)
+        let error = GetEventParameter(
+            event,
+            EventParamName(kEventParamDirectObject),
+            EventParamName(typeEventHotKeyID),
+            nil,
+            MemoryLayout<EventHotKeyID>.size,
+            nil,
+            &hotKeyId
+        )
 
         guard error == noErr else { return error }
         assert(hotKeyId.signature == UTGetOSTypeFromString("Magnet" as CFString), "Invalid hot key id")
@@ -195,7 +241,29 @@ private extension HotKeyCenter {
         let hotKey = lock.around { hotKeys.values.first(where: { $0.hotKeyId == hotKeyId.id }) }
         switch GetEventKind(event) {
         case EventParamName(kEventHotKeyPressed):
-            hotKey?.invoke()
+            if let hotKey = hotKey {
+                hotKey.invoke()
+                if detectKeyHold {
+                    keyHoldInvokeCreator = DispatchWorkItem { [weak self] in
+                        guard let self = self else { return }
+
+                        self.keyHoldInvoker = Timer.scheduledTimer(withTimeInterval: HotKeyCenter.keyRepeatInterval, repeats: true) { [weak self] timer in
+                            guard let self = self,
+                                  let hotKey = self.lock.around({ self.hotKeys.values.first(where: { $0.hotKeyId == hotKeyId.id }) })
+                            else {
+                                timer.invalidate()
+                                return
+                            }
+
+                            hotKey.invoke()
+                        }
+                    }
+                    DispatchQueue.main.asyncAfter(deadline: DispatchTime.now() + HotKeyCenter.initialKeyRepeatInterval, execute: keyHoldInvokeCreator!)
+                }
+            }
+        case EventParamName(kEventHotKeyReleased) where detectKeyHold:
+            keyHoldInvoker?.invalidate()
+            keyHoldInvokeCreator?.cancel()
         default:
             assert(false, "Unknown event kind")
         }
@@ -204,6 +272,7 @@ private extension HotKeyCenter {
 }
 
 // MARK: - Double Tap Modifier Event
+
 private extension HotKeyCenter {
     func installModifiersChangedEventHandlerIfNeeded() {
         NSEvent.addGlobalMonitorForEvents(matching: .flagsChanged) { [weak self] event in

@@ -101,10 +101,8 @@ public final class HotKeyCenter {
         self.notificationCenter = notificationCenter
         self.detectKeyHold = detectKeyHold
 
-        installHotKeyEventHandler(kind: OSType(kEventHotKeyPressed))
-        if detectKeyHold {
-            installHotKeyEventHandler(kind: OSType(kEventHotKeyReleased))
-        }
+        installHotKeyEventHandler()
+
         installModifiersChangedEventHandlerIfNeeded()
         observeApplicationTerminate()
     }
@@ -205,6 +203,8 @@ extension HotKeyCenter {
     }
 
     @objc func applicationWillTerminate() {
+        keyHoldInvokeCreator?.cancel()
+        keyHoldInvoker?.invalidate()
         unregisterAll()
     }
 }
@@ -212,16 +212,50 @@ extension HotKeyCenter {
 // MARK: - HotKey Events
 
 private extension HotKeyCenter {
-    func installHotKeyEventHandler(kind: OSType) {
-        var eventType = EventTypeSpec()
-        eventType.eventClass = OSType(kEventClassKeyboard)
-        eventType.eventKind = kind
+    func installHotKeyEventHandler() {
+        var eventTypeP = EventTypeSpec()
+        eventTypeP.eventClass = OSType(kEventClassKeyboard)
+        eventTypeP.eventKind = OSType(kEventHotKeyPressed)
         InstallEventHandler(GetEventDispatcherTarget(), { _, inEvent, _ -> OSStatus in
-            HotKeyCenter.shared.sendKeyboardEvent(inEvent!)
-        }, 1, &eventType, nil, nil)
+            HotKeyCenter.shared.sendPressedKeyboardEvent(inEvent!)
+        }, 1, &eventTypeP, nil, nil)
+
+        var eventTypeR = EventTypeSpec()
+        eventTypeR.eventClass = OSType(kEventClassKeyboard)
+        eventTypeR.eventKind = OSType(kEventHotKeyReleased)
+        InstallEventHandler(GetEventDispatcherTarget(), { _, inEvent, _ -> OSStatus in
+            HotKeyCenter.shared.sendReleasedKeyboardEvent(inEvent!)
+        }, 1, &eventTypeR, nil, nil)
     }
 
-    func sendKeyboardEvent(_ event: EventRef) -> OSStatus {
+    func sendReleasedKeyboardEvent(_ event: EventRef) -> OSStatus {
+        assert(Int(GetEventClass(event)) == kEventClassKeyboard, "Unknown event class")
+
+        var hotKeyId = EventHotKeyID()
+        let error = GetEventParameter(
+            event,
+            EventParamName(kEventParamDirectObject),
+            EventParamName(typeEventHotKeyID),
+            nil,
+            MemoryLayout<EventHotKeyID>.size,
+            nil,
+            &hotKeyId
+        )
+
+        guard error == noErr else { return error }
+        assert(hotKeyId.signature == UTGetOSTypeFromString("Magnet" as CFString), "Invalid hot key id")
+
+        switch GetEventKind(event) {
+        case EventParamName(kEventHotKeyReleased):
+            keyHoldInvoker?.invalidate()
+            keyHoldInvokeCreator?.cancel()
+        default:
+            assert(false, "Unknown event kind")
+        }
+        return noErr
+    }
+
+    func sendPressedKeyboardEvent(_ event: EventRef) -> OSStatus {
         assert(Int(GetEventClass(event)) == kEventClassKeyboard, "Unknown event class")
 
         var hotKeyId = EventHotKeyID()
@@ -245,7 +279,7 @@ private extension HotKeyCenter {
                 hotKey.invoke()
                 if detectKeyHold {
                     keyHoldInvokeCreator = DispatchWorkItem { [weak self] in
-                        guard let self = self else { return }
+                        guard let self = self, let creator = self.keyHoldInvokeCreator, !creator.isCancelled else { return }
 
                         self.keyHoldInvoker = Timer.scheduledTimer(withTimeInterval: HotKeyCenter.keyRepeatInterval, repeats: true) { [weak self] timer in
                             guard let self = self,
@@ -254,16 +288,12 @@ private extension HotKeyCenter {
                                 timer.invalidate()
                                 return
                             }
-
                             hotKey.invoke()
                         }
                     }
                     DispatchQueue.main.asyncAfter(deadline: DispatchTime.now() + HotKeyCenter.initialKeyRepeatInterval, execute: keyHoldInvokeCreator!)
                 }
             }
-        case EventParamName(kEventHotKeyReleased) where detectKeyHold:
-            keyHoldInvoker?.invalidate()
-            keyHoldInvokeCreator?.cancel()
         default:
             assert(false, "Unknown event kind")
         }

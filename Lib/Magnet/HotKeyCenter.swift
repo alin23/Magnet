@@ -81,18 +81,18 @@ public final class HotKeyCenter {
     private static var keyRepeatIntervalObserver = UserDefaults.standard
         .publisher(for: \.keyRepeat)
         .sink { interval in
-            HotKeyCenter.keyRepeatInterval = interval * 0.015
+            HotKeyCenter.keyRepeatInterval = max(interval, 2) * 0.015
         }
 
-    public static var keyRepeatInterval = UserDefaults.standard.keyRepeat * 0.015
+    public static var keyRepeatInterval = max(UserDefaults.standard.keyRepeat, 2) * 0.015
 
     private static var initialKeyRepeatIntervalObserver = UserDefaults.standard
         .publisher(for: \.initialKeyRepeat)
         .sink { interval in
-            HotKeyCenter.initialKeyRepeatInterval = interval * 0.015
+            HotKeyCenter.initialKeyRepeatInterval = max(interval, 15) * 0.015
         }
 
-    public static var initialKeyRepeatInterval = UserDefaults.standard.initialKeyRepeat * 0.015
+    public static var initialKeyRepeatInterval = max(UserDefaults.standard.initialKeyRepeat, 15) * 0.015
 
     // MARK: - Initialize
 

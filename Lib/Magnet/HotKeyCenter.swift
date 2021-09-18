@@ -277,7 +277,7 @@ private extension HotKeyCenter {
         case EventParamName(kEventHotKeyPressed):
             if let hotKey = hotKey {
                 hotKey.invoke()
-                if detectKeyHold {
+                if detectKeyHold && hotKey.detectKeyHold {
                     keyHoldInvokeCreator = DispatchWorkItem { [weak self] in
                         guard let self = self, let creator = self.keyHoldInvokeCreator, !creator.isCancelled else { return }
 

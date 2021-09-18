@@ -20,6 +20,7 @@ public final class HotKey: NSObject {
     public let target: AnyObject?
     public let action: Selector?
     public let actionQueue: ActionQueue
+    public var detectKeyHold = true
 
     var hotKeyId: UInt32?
     var hotKeyRef: EventHotKeyRef?

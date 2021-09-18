@@ -20,7 +20,7 @@ public final class HotKey: NSObject {
     public let target: AnyObject?
     public let action: Selector?
     public let actionQueue: ActionQueue
-    public var detectKeyHold = true
+    public var detectKeyHold = false
 
     var hotKeyId: UInt32?
     var hotKeyRef: EventHotKeyRef?
@@ -43,23 +43,25 @@ public final class HotKey: NSObject {
     }
 
     // MARK: - Initialize
-    public init(identifier: String, keyCombo: KeyCombo, target: AnyObject, action: Selector, actionQueue: ActionQueue = .main) {
+    public init(identifier: String, keyCombo: KeyCombo, target: AnyObject, action: Selector, actionQueue: ActionQueue = .main, detectKeyHold: Bool = false) {
         self.identifier = identifier
         self.keyCombo = keyCombo
         self.callback = nil
         self.target = target
         self.action = action
         self.actionQueue = actionQueue
+        self.detectKeyHold = detectKeyHold
         super.init()
     }
 
-    public init(identifier: String, keyCombo: KeyCombo, actionQueue: ActionQueue = .main, handler: @escaping ((HotKey) -> Void)) {
+    public init(identifier: String, keyCombo: KeyCombo, actionQueue: ActionQueue = .main, detectKeyHold: Bool = false, handler: @escaping ((HotKey) -> Void)) {
         self.identifier = identifier
         self.keyCombo = keyCombo
         self.callback = handler
         self.target = nil
         self.action = nil
         self.actionQueue = actionQueue
+        self.detectKeyHold = detectKeyHold
         super.init()
     }
 

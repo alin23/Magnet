@@ -1,20 +1,34 @@
-// 
+//
 //  NSEventExtension.swift
 //
 //  Magnet
 //  GitHub: https://github.com/clipy
 //  HP: https://clipy-app.com
-// 
+//
 //  Copyright © 2015-2020 Clipy Project.
 //
 
-import Cocoa
 import Carbon
+import Cocoa
 import Sauce
 
 public extension NSEvent.ModifierFlags {
+    static let leftCommand = NSEvent.ModifierFlags(rawValue: UInt(NX_DEVICELCMDKEYMASK))
+    static let rightCommand = NSEvent.ModifierFlags(rawValue: UInt(NX_DEVICERCMDKEYMASK))
+    static let leftOption = NSEvent.ModifierFlags(rawValue: UInt(NX_DEVICELALTKEYMASK))
+    static let rightOption = NSEvent.ModifierFlags(rawValue: UInt(NX_DEVICERALTKEYMASK))
+    static let leftShift = NSEvent.ModifierFlags(rawValue: UInt(NX_DEVICELSHIFTKEYMASK))
+    static let rightShift = NSEvent.ModifierFlags(rawValue: UInt(NX_DEVICERSHIFTKEYMASK))
+    static let leftControl = NSEvent.ModifierFlags(rawValue: UInt(NX_DEVICELCTLKEYMASK))
+    static let rightControl = NSEvent.ModifierFlags(rawValue: UInt(NX_DEVICERCTLKEYMASK))
+    static let fn = NSEvent.ModifierFlags(rawValue: UInt(0x80))
+    static let hyper = NSEvent.ModifierFlags([.command, .control, .option, .shift])
+    static let meh = NSEvent.ModifierFlags([.control, .option, .shift])
+}
+
+public extension NSEvent.ModifierFlags {
     var containsSupportModifiers: Bool {
-        return contains(.command) || contains(.option) || contains(.control) || contains(.shift) || contains(.function)
+        !filterUnsupportModifiers().isEmpty
     }
 
     var isSingleFlags: Bool {
@@ -26,20 +40,13 @@ public extension NSEvent.ModifierFlags {
     }
 
     func filterUnsupportModifiers() -> NSEvent.ModifierFlags {
-        var filterdModifierFlags = NSEvent.ModifierFlags(rawValue: 0)
-        if contains(.command) {
-            filterdModifierFlags.insert(.command)
-        }
-        if contains(.option) {
-            filterdModifierFlags.insert(.option)
-        }
-        if contains(.control) {
-            filterdModifierFlags.insert(.control)
-        }
-        if contains(.shift) {
-            filterdModifierFlags.insert(.shift)
-        }
-        return filterdModifierFlags
+        intersection([
+            .command, .option, .control, .shift, .function,
+            .leftCommand, .rightCommand,
+            .leftOption, .rightOption,
+            .leftShift, .rightShift,
+            .leftControl, .rightControl,
+        ])
     }
 
     func filterNotShiftModifiers() -> NSEvent.ModifierFlags {
@@ -65,21 +72,47 @@ public extension NSEvent.ModifierFlags {
     }
 }
 
+let rightCmdKey = rightControlKey << 1
+
 public extension NSEvent.ModifierFlags {
     init(carbonModifiers: Int) {
         var result = NSEvent.ModifierFlags(rawValue: 0)
         if (carbonModifiers & cmdKey) != 0 {
             result.insert(.command)
+            if (carbonModifiers & rightCmdKey) != 0 {
+                result.insert(.rightCommand)
+            } else {
+                result.insert(.leftCommand)
+            }
         }
+
         if (carbonModifiers & optionKey) != 0 {
             result.insert(.option)
+            if (carbonModifiers & rightOptionKey) != 0 {
+                result.insert(.rightOption)
+            } else {
+                result.insert(.leftOption)
+            }
         }
+
         if (carbonModifiers & controlKey) != 0 {
             result.insert(.control)
+            if (carbonModifiers & rightControlKey) != 0 {
+                result.insert(.rightControl)
+            } else {
+                result.insert(.leftControl)
+            }
         }
+
         if (carbonModifiers & shiftKey) != 0 {
             result.insert(.shift)
+            if (carbonModifiers & rightShiftKey) != 0 {
+                result.insert(.rightShift)
+            } else {
+                result.insert(.leftShift)
+            }
         }
+
         self = result
     }
 
@@ -97,24 +130,38 @@ public extension NSEvent.ModifierFlags {
         if contains(.shift) {
             carbonModifiers |= shiftKey
         }
-        if contains(.function) && isSupportFunctionKey {
+
+        if contains(.rightCommand) {
+            carbonModifiers |= rightCmdKey
+        }
+        if contains(.rightOption) {
+            carbonModifiers |= rightOptionKey
+        }
+        if contains(.rightControl) {
+            carbonModifiers |= rightControlKey
+        }
+        if contains(.rightShift) {
+            carbonModifiers |= rightShiftKey
+        }
+
+        if contains(.function), isSupportFunctionKey {
             carbonModifiers |= Int(NSEvent.ModifierFlags.function.rawValue)
         }
         return carbonModifiers
     }
 }
 
-extension NSEvent.EventType {
-    fileprivate var isKeyboardEvent: Bool {
+private extension NSEvent.EventType {
+    var isKeyboardEvent: Bool {
         return [.keyUp, .keyDown, .flagsChanged].contains(self)
     }
 }
 
-extension NSEvent {
+public extension NSEvent {
     /// Returns a matching `KeyCombo` for the event, if the event is a keyboard event and the key is recognized.
-    public var keyCombo: KeyCombo? {
-        guard self.type.isKeyboardEvent else { return nil }
+    var keyCombo: KeyCombo? {
+        guard type.isKeyboardEvent else { return nil }
         guard let key = Sauce.shared.key(for: Int(self.keyCode)) else { return nil }
-        return KeyCombo(key: key, cocoaModifiers: self.modifierFlags)
+        return KeyCombo(key: key, cocoaModifiers: modifierFlags)
     }
 }

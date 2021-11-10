@@ -151,7 +151,9 @@ public extension HotKeyCenter {
             &carbonHotKey
         )
         guard error == noErr else {
-            unregister(with: hotKey)
+            if hotKey.hotKeyRef != nil {
+                unregister(with: hotKey)
+            }
             return false
         }
         hotKey.hotKeyId = hotKeyId.id
@@ -210,22 +212,59 @@ extension HotKeyCenter {
 }
 
 // MARK: - HotKey Events
+var pressedEventHandler: EventHandlerRef?
+var pressedEventType = EventTypeSpec()
+var pressedEventHandlerRunning = false
+
+var releasedEventHandler: EventHandlerRef?
+var releasedEventType = EventTypeSpec()
+var releasedEventHandlerRunning = false
+
+public extension HotKeyCenter {
+    func pauseEventHandler() {
+        guard pressedEventHandlerRunning, let pressedEventHandler = pressedEventHandler else {
+            return
+        }
+        pressedEventHandlerRunning = false
+        RemoveEventTypesFromHandler(pressedEventHandler, 1, &pressedEventType)
+    }
+    
+    func resumeEventHandler() {
+        guard !pressedEventHandlerRunning else {
+            return
+        }
+        pressedEventHandlerRunning = true
+        AddEventTypesToHandler(pressedEventHandler, 1, &pressedEventType)
+    }
+}
 
 private extension HotKeyCenter {
-    func installHotKeyEventHandler() {
-        var eventTypeP = EventTypeSpec()
-        eventTypeP.eventClass = OSType(kEventClassKeyboard)
-        eventTypeP.eventKind = OSType(kEventHotKeyPressed)
-        InstallEventHandler(GetEventDispatcherTarget(), { _, inEvent, _ -> OSStatus in
-            HotKeyCenter.shared.sendPressedKeyboardEvent(inEvent!)
-        }, 1, &eventTypeP, nil, nil)
-
-        var eventTypeR = EventTypeSpec()
-        eventTypeR.eventClass = OSType(kEventClassKeyboard)
-        eventTypeR.eventKind = OSType(kEventHotKeyReleased)
+    func installPressedEventHandler() {
+        pressedEventType.eventClass = OSType(kEventClassKeyboard)
+        pressedEventType.eventKind = OSType(kEventHotKeyPressed)
+        
+        InstallEventHandler(GetEventDispatcherTarget(), { callRef, inEvent, _ -> OSStatus in
+            let result = HotKeyCenter.shared.sendPressedKeyboardEvent(inEvent!)
+            guard result != eventNotHandledErr else {
+                return CallNextEventHandler(callRef, inEvent!)
+            }
+            return result
+        }, 1, &pressedEventType, nil, &pressedEventHandler)
+        pressedEventHandlerRunning = true
+    }
+    
+    func installReleasedEventHandler() {
+        releasedEventType.eventClass = OSType(kEventClassKeyboard)
+        releasedEventType.eventKind = OSType(kEventHotKeyReleased)
         InstallEventHandler(GetEventDispatcherTarget(), { _, inEvent, _ -> OSStatus in
             HotKeyCenter.shared.sendReleasedKeyboardEvent(inEvent!)
-        }, 1, &eventTypeR, nil, nil)
+        }, 1, &releasedEventType, nil, &releasedEventHandler)
+        releasedEventHandlerRunning = true
+    }
+    
+    func installHotKeyEventHandler() {
+        installPressedEventHandler()
+        installReleasedEventHandler()
     }
 
     func sendReleasedKeyboardEvent(_ event: EventRef) -> OSStatus {
@@ -273,10 +312,12 @@ private extension HotKeyCenter {
         assert(hotKeyId.signature == UTGetOSTypeFromString("Magnet" as CFString), "Invalid hot key id")
 
         let hotKey = lock.around { hotKeys.values.first(where: { $0.hotKeyId == hotKeyId.id }) }
+        var result = noErr
+        
         switch GetEventKind(event) {
         case EventParamName(kEventHotKeyPressed):
             if let hotKey = hotKey {
-                hotKey.invoke()
+                result = hotKey.invoke()
                 if detectKeyHold && hotKey.detectKeyHold {
                     keyHoldInvokeCreator = DispatchWorkItem { [weak self] in
                         guard let self = self, let creator = self.keyHoldInvokeCreator, !creator.isCancelled else { return }
@@ -288,7 +329,7 @@ private extension HotKeyCenter {
                                 timer.invalidate()
                                 return
                             }
-                            hotKey.invoke()
+                            _ = hotKey.invoke()
                         }
                     }
                     DispatchQueue.main.asyncAfter(deadline: DispatchTime.now() + HotKeyCenter.initialKeyRepeatInterval, execute: keyHoldInvokeCreator!)
@@ -297,7 +338,7 @@ private extension HotKeyCenter {
         default:
             assert(false, "Unknown event kind")
         }
-        return noErr
+        return result
     }
 }
 
@@ -318,7 +359,7 @@ private extension HotKeyCenter {
                 self.hotKeys.values
                     .filter { $0.keyCombo.doubledModifiers }
                     .filter { $0.keyCombo.modifiers == tappedModifierFlags.carbonModifiers() }
-                    .forEach { $0.invoke() }
+                    .forEach { _ = $0.invoke() }
             }
         }
     }

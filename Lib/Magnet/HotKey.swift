@@ -21,6 +21,7 @@ public final class HotKey: NSObject {
     public let action: Selector?
     public let actionQueue: ActionQueue
     public var detectKeyHold = false
+    public var forwardNextEvent = false
 
     var hotKeyId: UInt32?
     var hotKeyRef: EventHotKeyRef?
@@ -69,20 +70,27 @@ public final class HotKey: NSObject {
 
 // MARK: - Invoke
 public extension HotKey {
-    func invoke() {
+    func invoke() -> OSStatus {
         guard let callback = self.callback else {
-            guard let target = self.target as? NSObject, let selector = self.action else { return }
-            guard target.responds(to: selector) else { return }
+            guard let target = self.target as? NSObject, let selector = self.action else { return OSStatus(eventNotHandledErr) }
+            guard target.responds(to: selector) else { return OSStatus(eventNotHandledErr) }
             actionQueue.execute { [weak self] in
                 guard let wSelf = self else { return }
                 target.perform(selector, with: wSelf)
             }
-            return
+            return OSStatus(noErr)
         }
         actionQueue.execute { [weak self] in
             guard let wSelf = self else { return }
             callback(wSelf)
         }
+
+        if forwardNextEvent {
+            forwardNextEvent = false
+            return OSStatus(eventNotHandledErr)
+        }
+
+        return OSStatus(noErr)
     }
 }
 

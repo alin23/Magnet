@@ -5,12 +5,13 @@ import PackageDescription
 let package = Package(
     name: "Magnet",
     platforms: [
-      .macOS(.v10_15)
+        .macOS(.v10_15),
     ],
     products: [
         .library(
             name: "Magnet",
-            targets: ["Magnet"]),
+            targets: ["Magnet"]
+        ),
     ],
     dependencies: [
         .package(url: "https://github.com/Clipy/Sauce", .upToNextMinor(from: "2.2.0")),
@@ -19,11 +20,13 @@ let package = Package(
         .target(
             name: "Magnet",
             dependencies: ["Sauce"],
-            path: "Lib/Magnet"),
+            path: "Lib/Magnet"
+        ),
         .testTarget(
             name: "MagnetTests",
             dependencies: ["Magnet"],
-            path: "Lib/MagnetTests"),
+            path: "Lib/MagnetTests"
+        ),
     ],
     swiftLanguageVersions: [.v5]
 )

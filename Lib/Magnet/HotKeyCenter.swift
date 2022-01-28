@@ -165,7 +165,9 @@ public extension HotKeyCenter {
 
     func unregister(with hotKey: HotKey) {
         guard let carbonHotKey = hotKey.hotKeyRef else {
-            print("Unregistering hotkey that was never registered in this HotkeyCenter: \(hotKey.identifier)")
+            #if DEBUG
+                print("Unregistering hotkey that was never registered in this HotkeyCenter: \(hotKey.identifier)")
+            #endif
             return
         }
         UnregisterEventHotKey(carbonHotKey)
@@ -212,6 +214,7 @@ extension HotKeyCenter {
 }
 
 // MARK: - HotKey Events
+
 var pressedEventHandler: EventHandlerRef?
 var pressedEventType = EventTypeSpec()
 var pressedEventHandlerRunning = false
@@ -228,7 +231,7 @@ public extension HotKeyCenter {
         pressedEventHandlerRunning = false
         RemoveEventTypesFromHandler(pressedEventHandler, 1, &pressedEventType)
     }
-    
+
     func resumeEventHandler() {
         guard !pressedEventHandlerRunning else {
             return
@@ -242,7 +245,7 @@ private extension HotKeyCenter {
     func installPressedEventHandler() {
         pressedEventType.eventClass = OSType(kEventClassKeyboard)
         pressedEventType.eventKind = OSType(kEventHotKeyPressed)
-        
+
         InstallEventHandler(GetEventDispatcherTarget(), { callRef, inEvent, _ -> OSStatus in
             let result = HotKeyCenter.shared.sendPressedKeyboardEvent(inEvent!)
             guard result != eventNotHandledErr else {
@@ -252,7 +255,7 @@ private extension HotKeyCenter {
         }, 1, &pressedEventType, nil, &pressedEventHandler)
         pressedEventHandlerRunning = true
     }
-    
+
     func installReleasedEventHandler() {
         releasedEventType.eventClass = OSType(kEventClassKeyboard)
         releasedEventType.eventKind = OSType(kEventHotKeyReleased)
@@ -261,7 +264,7 @@ private extension HotKeyCenter {
         }, 1, &releasedEventType, nil, &releasedEventHandler)
         releasedEventHandlerRunning = true
     }
-    
+
     func installHotKeyEventHandler() {
         installPressedEventHandler()
         installReleasedEventHandler()
@@ -289,7 +292,7 @@ private extension HotKeyCenter {
             keyHoldInvoker?.invalidate()
             keyHoldInvokeCreator?.cancel()
         default:
-            assert(false, "Unknown event kind")
+            assertionFailure("Unknown event kind")
         }
         return noErr
     }
@@ -313,12 +316,12 @@ private extension HotKeyCenter {
 
         let hotKey = lock.around { hotKeys.values.first(where: { $0.hotKeyId == hotKeyId.id }) }
         var result = noErr
-        
+
         switch GetEventKind(event) {
         case EventParamName(kEventHotKeyPressed):
             if let hotKey = hotKey {
                 result = hotKey.invoke()
-                if detectKeyHold && hotKey.detectKeyHold {
+                if detectKeyHold, hotKey.detectKeyHold {
                     keyHoldInvokeCreator = DispatchWorkItem { [weak self] in
                         guard let self = self, let creator = self.keyHoldInvokeCreator, !creator.isCancelled else { return }
 
@@ -336,7 +339,7 @@ private extension HotKeyCenter {
                 }
             }
         default:
-            assert(false, "Unknown event kind")
+            assertionFailure("Unknown event kind")
         }
         return result
     }

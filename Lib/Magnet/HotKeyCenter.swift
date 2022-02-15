@@ -165,9 +165,6 @@ public extension HotKeyCenter {
 
     func unregister(with hotKey: HotKey) {
         guard let carbonHotKey = hotKey.hotKeyRef else {
-            #if DEBUG
-                print("Unregistering hotkey that was never registered in this HotkeyCenter: \(hotKey.identifier)")
-            #endif
             return
         }
         UnregisterEventHotKey(carbonHotKey)

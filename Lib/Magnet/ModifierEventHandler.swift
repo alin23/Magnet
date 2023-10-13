@@ -1,10 +1,10 @@
-// 
+//
 //  ModifierEventHandler.swift
 //
 //  Magnet
 //  GitHub: https://github.com/clipy
 //  HP: https://clipy-app.com
-// 
+//
 //  Copyright © 2015-2020 Clipy Project.
 //
 
@@ -39,7 +39,7 @@ public extension ModifierEventHandler {
     }
 
     private func handleDoubleTapModifierEvent(modifierFlags: NSEvent.ModifierFlags) {
-        let tappedModifierFlags = modifierFlags.filterUnsupportModifiers()
+        let tappedModifierFlags = modifierFlags.filterUnsupportedModifiers()
         let commandTapped = tappedModifierFlags.contains(.command)
         let shiftTapped = tappedModifierFlags.contains(.shift)
         let controlTapped = tappedModifierFlags.contains(.control)

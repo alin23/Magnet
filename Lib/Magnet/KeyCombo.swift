@@ -59,14 +59,14 @@ public final class KeyCombo: NSObject, NSCopying, NSCoding, Codable {
     }
 
     public init?(key: Key, cocoaModifiers: NSEvent.ModifierFlags) {
-        var filterdCocoaModifiers = cocoaModifiers.filterUnsupportModifiers()
+        var filteredCocoaModifiers = cocoaModifiers.filterUnsupportedModifiers()
         // In the case of the function key, will need to add the modifier manually
         if key.isFunctionKey {
-            filterdCocoaModifiers.insert(.function)
+            filteredCocoaModifiers.insert(.function)
         }
-        guard filterdCocoaModifiers.containsSupportModifiers else { return nil }
+        guard filteredCocoaModifiers.containsSupportedModifiers else { return nil }
         self.key = key
-        self.modifiers = filterdCocoaModifiers.carbonModifiers(isSupportFunctionKey: true)
+        self.modifiers = filteredCocoaModifiers.carbonModifiers(isSupportFunctionKey: true)
         self.doubledModifiers = false
     }
 
@@ -75,10 +75,10 @@ public final class KeyCombo: NSObject, NSCopying, NSCoding, Codable {
     }
 
     public init?(doubledCocoaModifiers modifiers: NSEvent.ModifierFlags) {
-        let filterdCocoaModifiers = modifiers.filterUnsupportModifiers()
+        let filteredCocoaModifiers = modifiers.filterUnsupportedModifiers()
         guard modifiers.isSingleFlags else { return nil }
         self.key = .a
-        self.modifiers = filterdCocoaModifiers.carbonModifiers()
+        self.modifiers = filteredCocoaModifiers.carbonModifiers()
         self.doubledModifiers = true
     }
 

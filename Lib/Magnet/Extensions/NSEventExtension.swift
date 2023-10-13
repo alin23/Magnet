@@ -27,8 +27,8 @@ public extension NSEvent.ModifierFlags {
 }
 
 public extension NSEvent.ModifierFlags {
-    var containsSupportModifiers: Bool {
-        !filterUnsupportModifiers().isEmpty
+    var containsSupportedModifiers: Bool {
+        !filterUnsupportedModifiers().isEmpty
     }
 
     var isSingleFlags: Bool {
@@ -39,7 +39,13 @@ public extension NSEvent.ModifierFlags {
         return [commandSelected, optionSelected, controlSelected, shiftSelected].trueCount == 1
     }
 
-    func filterUnsupportModifiers() -> NSEvent.ModifierFlags {
+    var deviceIndependentFlags: NSEvent.ModifierFlags {
+        return NSEvent.ModifierFlags(rawValue: rawValue & NSEvent.ModifierFlags.deviceIndependentFlagsMask.rawValue)
+    }
+
+    /// Returns a new `NSEvent.ModifierFlags` instance that contains only the supported modifier flags.
+    /// Supported modifier flags are `.command`, `.option`, `.control`, `.shift`, `.function`, `.leftCommand`, `.rightCommand`, `.leftOption`, `.rightOption`, `.leftShift`, `.rightShift`, `.leftControl`, and `.rightControl`.
+    func filterUnsupportedModifiers() -> NSEvent.ModifierFlags {
         intersection([
             .command, .option, .control, .shift, .function,
             .leftCommand, .rightCommand,

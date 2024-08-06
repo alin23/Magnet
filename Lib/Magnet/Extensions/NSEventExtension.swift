@@ -78,7 +78,7 @@ public extension NSEvent.ModifierFlags {
     }
 }
 
-let rightCmdKey = rightControlKey << 1
+public let rightCmdKey = rightControlKey << 1
 
 public extension NSEvent.ModifierFlags {
     init(carbonModifiers: Int) {

@@ -80,7 +80,47 @@ public extension NSEvent.ModifierFlags {
 
 public let rightCmdKey = rightControlKey << 1
 
+public extension Int {
+    func carbonModifiersString(isSupportFunctionKey: Bool = false) -> [String] {
+        var carbonModifiers: [String] = []
+        if self & cmdKey != 0 {
+            carbonModifiers.append("cmd")
+        }
+        if self & optionKey != 0 {
+            carbonModifiers.append("option")
+        }
+        if self & controlKey != 0 {
+            carbonModifiers.append("control")
+        }
+        if self & shiftKey != 0 {
+            carbonModifiers.append("shift")
+        }
+
+        if self & rightCmdKey != 0 {
+            carbonModifiers.append("rightCmd")
+        }
+        if self & rightOptionKey != 0 {
+            carbonModifiers.append("rightOption")
+        }
+        if self & rightControlKey != 0 {
+            carbonModifiers.append("rightControl")
+        }
+        if self & rightShiftKey != 0 {
+            carbonModifiers.append("rightShift")
+        }
+
+        if self & Int(NSEvent.ModifierFlags.function.rawValue) != 0, isSupportFunctionKey {
+            carbonModifiers.append("fn")
+        }
+        return carbonModifiers
+    }
+}
+
 public extension NSEvent.ModifierFlags {
+    func carbonString(isSupportFunctionKey: Bool = false) -> [String] {
+        carbonModifiers(isSupportFunctionKey: isSupportFunctionKey).carbonString(isSupportFunctionKey: isSupportFunctionKey)
+    }
+
     init(carbonModifiers: Int) {
         var result = NSEvent.ModifierFlags(rawValue: 0)
         if (carbonModifiers & cmdKey) != 0 {

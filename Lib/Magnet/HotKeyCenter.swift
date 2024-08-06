@@ -164,13 +164,16 @@ public extension HotKeyCenter {
     }
 
     func unregister(with hotKey: HotKey) {
+        defer {
+            _ = lock.around {
+                hotKeys.removeValue(forKey: hotKey.identifier)
+            }
+        }
         guard let carbonHotKey = hotKey.hotKeyRef else {
             return
         }
         UnregisterEventHotKey(carbonHotKey)
-        _ = lock.around {
-            hotKeys.removeValue(forKey: hotKey.identifier)
-        }
+
         hotKey.hotKeyId = nil
         hotKey.hotKeyRef = nil
     }

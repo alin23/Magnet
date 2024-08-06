@@ -151,6 +151,9 @@ public extension HotKeyCenter {
             &carbonHotKey
         )
         guard error == noErr else {
+            #if DEBUG
+                print("Failed to register hotkey \(hotKey.identifier) (\(hotKey.keyCombo.keyEquivalentModifierMaskString)-\(hotKey.keyCombo.keyEquivalent)): \(error)")
+            #endif
             if hotKey.hotKeyRef != nil {
                 unregister(with: hotKey)
             }

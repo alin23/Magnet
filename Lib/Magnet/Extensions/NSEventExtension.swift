@@ -118,7 +118,7 @@ public extension Int {
 
 public extension NSEvent.ModifierFlags {
     func carbonString(isSupportFunctionKey: Bool = false) -> [String] {
-        carbonModifiers(isSupportFunctionKey: isSupportFunctionKey).carbonString(isSupportFunctionKey: isSupportFunctionKey)
+        carbonModifiers(isSupportFunctionKey: isSupportFunctionKey).carbonModifiersString(isSupportFunctionKey: isSupportFunctionKey)
     }
 
     init(carbonModifiers: Int) {

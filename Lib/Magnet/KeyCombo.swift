@@ -54,17 +54,17 @@ public final class KeyCombo: NSObject, NSCopying, NSCoding, Codable {
         self.init(key: key, cocoaModifiers: cocoaModifiers)
     }
 
-    public convenience init?(key: Key, carbonModifiers: Int) {
-        self.init(key: key, cocoaModifiers: NSEvent.ModifierFlags(carbonModifiers: carbonModifiers))
+    public convenience init?(key: Key, carbonModifiers: Int, allowEmptyModifiers: Bool = false) {
+        self.init(key: key, cocoaModifiers: NSEvent.ModifierFlags(carbonModifiers: carbonModifiers), allowEmptyModifiers: allowEmptyModifiers)
     }
 
-    public init?(key: Key, cocoaModifiers: NSEvent.ModifierFlags) {
+    public init?(key: Key, cocoaModifiers: NSEvent.ModifierFlags, allowEmptyModifiers: Bool = false) {
         var filteredCocoaModifiers = cocoaModifiers.filterUnsupportedModifiers()
         // In the case of the function key, will need to add the modifier manually
         if key.isFunctionKey {
             filteredCocoaModifiers.insert(.function)
         }
-        guard filteredCocoaModifiers.containsSupportedModifiers else { return nil }
+        guard allowEmptyModifiers || filteredCocoaModifiers.containsSupportedModifiers else { return nil }
         self.key = key
         self.modifiers = filteredCocoaModifiers.carbonModifiers(isSupportFunctionKey: true)
         self.doubledModifiers = false
@@ -87,7 +87,7 @@ public final class KeyCombo: NSObject, NSCopying, NSCoding, Codable {
         if doubledModifiers {
             return KeyCombo(doubledCarbonModifiers: modifiers) as Any
         } else {
-            return KeyCombo(key: key, carbonModifiers: modifiers) as Any
+            return KeyCombo(key: key, carbonModifiers: modifiers, allowEmptyModifiers: modifiers == 0) as Any
         }
     }
 
